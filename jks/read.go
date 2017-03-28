@@ -5,7 +5,7 @@ package jks
 
 import (
 	"bytes"
-	"crypto/sha1"
+	"crypto/hmac"
 	"crypto/x509"
 	"encoding/binary"
 	"errors"
@@ -17,12 +17,6 @@ import (
 func Parse(raw []byte, opts *Options) (*Keystore, error) {
 	if opts == nil {
 		opts = &defaultOptions
-	}
-
-	if !opts.SkipVerifyDigest {
-		if err := VerifyHash(raw, opts.Password); err != nil {
-			return nil, err
-		}
 	}
 
 	buf := bytes.NewReader(raw)
@@ -81,7 +75,21 @@ func Parse(raw []byte, opts *Options) (*Keystore, error) {
 		}
 	}
 
-	return ks, nil
+	switch {
+	// there should be exactly 20 bytes left
+	case buf.Len() != 20:
+		return ks, errors.New("malformed digest at end of file")
+
+	case opts.SkipVerifyDigest:
+		return ks, nil
+
+	default:
+		digest := ComputeDigest(raw[:len(raw)-20], opts.Password)
+		if !hmac.Equal(digest, raw[len(raw)-20:]) {
+			return ks, errors.New("digest mismatch")
+		}
+		return ks, nil
+	}
 }
 
 func readUint32(buf *bytes.Reader, desc string,
@@ -270,29 +278,4 @@ func readKeypair(buf *bytes.Reader, opts *Options) (*Keypair, error) {
 	}
 
 	return kp, nil
-}
-
-func VerifyHash(raw []byte, password string) error {
-	md := sha1.New()
-	if len(raw) < md.Size() {
-		return errors.New("data too small to contain SHA-1 digest")
-	}
-
-	var ucs2 [2]byte
-	for _, r := range password {
-		ucs2[0] = byte((r >> 8) & 0xFF)
-		ucs2[1] = byte(r & 0xFF)
-
-		md.Write(ucs2[:])
-	}
-
-	md.Write([]byte(DigestSeparator))
-
-	md.Write(raw[:len(raw)-20])
-	digest := md.Sum(nil)
-	if !bytes.Equal(digest, raw[len(raw)-20:]) {
-		return errors.New("hash verification failed")
-	}
-
-	return nil
 }

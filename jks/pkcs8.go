@@ -2,6 +2,7 @@ package jks
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha1"
 	"crypto/x509/pkix"
 	"encoding/asn1"
@@ -114,6 +115,55 @@ func DecryptJavaKeyEncryption1(ciphertext []byte, password string,
 	}
 
 	return plaintext, nil
+}
+
+// EncryptJavaKeyEncryption1 encrypts plaintext with one of the Java key
+// encryption algorithms.
+//
+// PLEASE NOTE: this appears to be custom crypto. You should *never* do this. DO
+// NOT RE-USE THIS CODE. If you want an example of how to encrypt a blob of data
+// or a file with a password, then see the password-encrypt example at:
+//  https://github.com/lwithers/go-crypto-examples
+func EncryptJavaKeyEncryption1(plaintext []byte, password string,
+) ([]byte, error) {
+	// encode the password in UCS-2
+	var passwd []byte
+	for _, r := range password {
+		passwd = append(passwd, byte(r>>8))
+		passwd = append(passwd, byte(r))
+	}
+
+	// generate a salt
+	var salt [20]byte
+	if _, err := rand.Read(salt[:]); err != nil {
+		return nil, err
+	}
+
+	// basically, we use a SHA-1 hash over (passwd+lastHash) to produce
+	// a stream of bytes we then XOR with the "ciphertext". For the first
+	// block we use ‘salt’ in place of ‘last_hash’.
+	xorStream := xorStreamForJavaKeyEncryption1(len(plaintext),
+		passwd, salt[:])
+
+	// XOR the SHA-1-derived bytestream with the plaintext to derive the
+	// "ciphertext"
+	ciphertext := make([]byte, len(plaintext))
+	for i := range ciphertext {
+		ciphertext[i] = plaintext[i] ^ xorStream[i]
+	}
+
+	// compute the SHA-1 hash over (passwd+plaintext)
+	md := sha1.New()
+	md.Write(passwd)
+	md.Write(plaintext)
+	digest := md.Sum(nil)
+
+	// return salt:ciphertext:digest
+	result := make([]byte, 0, len(salt)+len(ciphertext)+len(digest))
+	result = append(result, salt[:]...)
+	result = append(result, ciphertext...)
+	result = append(result, digest...)
+	return result, nil
 }
 
 // xorStreamForJavaKeyEncryption1 returns a stream of bytes that is XORed with

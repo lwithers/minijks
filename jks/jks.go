@@ -4,6 +4,7 @@ Package jks provides routines for manipulating Java Keystore files.
 package jks
 
 import (
+	"crypto/sha1"
 	"crypto/x509"
 	"time"
 )
@@ -80,4 +81,25 @@ type Options struct {
 
 var defaultOptions = Options{
 	SkipVerifyDigest: true,
+}
+
+// ComputeDigest performs the custom hash function over the given file data.
+// DO NOT RE-USE THIS CODE: this is an atrocious way to perform message
+// authentication. Use the HMAC example from
+// https://github.com/lwithers/go-crypto-examples instead. Note this construct
+// is vulnerable to a length extension attack, which is actually exploitable if
+// the JKS reader code does not properly check the "number of entries" value.
+func ComputeDigest(raw []byte, password string) []byte {
+	md := sha1.New()
+	var ucs2 [2]byte
+	for _, r := range password {
+		ucs2[0] = byte((r >> 8) & 0xFF)
+		ucs2[1] = byte(r & 0xFF)
+
+		md.Write(ucs2[:])
+	}
+
+	md.Write([]byte(DigestSeparator))
+	md.Write(raw)
+	return md.Sum(nil)
 }
