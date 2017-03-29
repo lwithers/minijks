@@ -28,8 +28,27 @@ var (
 // private key. It is defined in RFC 5208 § 6:
 //  https://tools.ietf.org/html/rfc5208#section-6
 type EncryptedPrivateKeyInfo struct {
-	Algo          pkix.AlgorithmIdentifier
+	// Algo identifies the encryption algorithm (and any associated
+	// parameters) used to encrypt EncryptedData.
+	Algo pkix.AlgorithmIdentifier
+
+	// EncryptedData is an encrypted, marshalled PrivateKeyInfo.
 	EncryptedData []byte
+}
+
+// PrivateKeyInfo is the ASN.1 structure used to hold a private key. It is
+// defined in RFC 52080 § 5:
+//  https://tools.ietf.org/html/rfc5208#section-5
+type PrivateKeyInfo struct {
+	// Version of structure. Should be zero.
+	Version int
+
+	// Algo denotes the private key algorithm (e.g. RSA).
+	Algo pkix.AlgorithmIdentifier
+
+	// PrivateKey is the marshalled private key. It should be interpreted
+	// according to Algo.
+	PrivateKey []byte
 }
 
 // DecryptPKCS8 decrypts a PKCS#8 encoded object (presumably a private key). We

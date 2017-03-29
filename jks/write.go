@@ -2,6 +2,8 @@ package jks
 
 import (
 	"bytes"
+	"crypto/rsa"
+	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/binary"
@@ -9,6 +11,12 @@ import (
 	"fmt"
 	"io"
 	"time"
+)
+
+var (
+	// RFC 3279 § 2.3
+	oidPublicKeyRSA = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 1}
+	asn1NULL        = []byte{0x05, 0x00}
 )
 
 func (ks *Keystore) Pack(opts *Options) ([]byte, error) {
@@ -74,8 +82,23 @@ func writeKeypair(w io.Writer, kp *Keypair, opts *Options) error {
 	}
 	writeTimestamp(w, ts)
 
-	// TODO: marshal key into ‘raw’
-	raw := []byte("TODO")
+	// marshal the key into ‘raw’
+	// TODO: need to support non-RSA keys too
+	rsaKey := kp.PrivateKey.(*rsa.PrivateKey)
+	rawKeyInfo := PrivateKeyInfo{
+		Algo: pkix.AlgorithmIdentifier{
+			Algorithm: oidPublicKeyRSA,
+			Parameters: asn1.RawValue{
+				FullBytes: asn1NULL,
+			},
+		},
+		PrivateKey: x509.MarshalPKCS1PrivateKey(rsaKey),
+	}
+	raw, err := asn1.Marshal(rawKeyInfo)
+	if err != nil {
+		return fmt.Errorf("failed to marshal private key: %v", err)
+	}
+
 	ciphertext, err := EncryptJavaKeyEncryption1(raw, passwd)
 	if err != nil {
 		return fmt.Errorf("failed to marshal private key: %v", err)
@@ -83,6 +106,9 @@ func writeKeypair(w io.Writer, kp *Keypair, opts *Options) error {
 	keyInfo := EncryptedPrivateKeyInfo{
 		Algo: pkix.AlgorithmIdentifier{
 			Algorithm: JavaKeyEncryptionOID1,
+			Parameters: asn1.RawValue{
+				FullBytes: asn1NULL,
+			},
 		},
 		EncryptedData: ciphertext,
 	}
