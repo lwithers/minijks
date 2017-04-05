@@ -2,8 +2,11 @@ package jks
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha1"
+	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"errors"
@@ -21,6 +24,22 @@ var (
 	// password-based encryption used in .jks files.
 	JavaKeyEncryptionOID2 = asn1.ObjectIdentifier{
 		1, 3, 6, 1, 4, 1, 42, 2, 19, 1,
+	}
+
+	// RFC 3279 § 2.3
+	oidPublicKeyRSA = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 1}
+
+	// RFC 5480 § 2.1.1
+	oidPublicKeyECDSA = asn1.ObjectIdentifier{1, 2, 840, 10045, 2, 1}
+	oidNamedCurveP224 = asn1.ObjectIdentifier{1, 3, 132, 0, 33}
+	oidNamedCurveP256 = asn1.ObjectIdentifier{1, 2, 840, 10045, 3, 1, 7}
+	oidNamedCurveP384 = asn1.ObjectIdentifier{1, 3, 132, 0, 34}
+	oidNamedCurveP521 = asn1.ObjectIdentifier{1, 3, 132, 0, 35}
+
+	// Java appears to want unused parameters structures encoded as an
+	// ASN.1 NULL type.
+	asn1NULL = asn1.RawValue{
+		FullBytes: []byte{0x05, 0x00},
 	}
 )
 
@@ -84,6 +103,64 @@ func DecryptPKCS8(raw []byte, password string) ([]byte, error) {
 		return nil, fmt.Errorf("unhandled encryption algorithm %v",
 			keyInfo.Algo.Algorithm)
 	}
+}
+
+// MarshalPKCS8 marshals an RSA or EC private key into an (unencrypted)
+// PKCS#8 PrivateKeyInfo structure. It returns the DER-encoded structure.
+func MarshalPKCS8(key interface{}) ([]byte, error) {
+	var ki PrivateKeyInfo
+	switch key := key.(type) {
+	case *rsa.PrivateKey:
+		ki.Algo = pkix.AlgorithmIdentifier{
+			Algorithm:  oidPublicKeyRSA,
+			Parameters: asn1NULL,
+		}
+		ki.PrivateKey = x509.MarshalPKCS1PrivateKey(key)
+
+	case *ecdsa.PrivateKey:
+		c, err := oidFromNamedCurve(key)
+		if err != nil {
+			return nil, err
+		}
+
+		ki.Algo = pkix.AlgorithmIdentifier{
+			Algorithm: oidPublicKeyECDSA,
+		}
+		ki.Algo.Parameters.FullBytes, err = asn1.Marshal(c)
+		if err != nil {
+			return nil, fmt.Errorf("marshal EC private key "+
+				"params: %v", err)
+		}
+
+		ki.PrivateKey, err = x509.MarshalECPrivateKey(key)
+		if err != nil {
+			return nil, fmt.Errorf("marshal EC private key: %v",
+				err)
+		}
+
+	default:
+		return nil, fmt.Errorf("unhandled private key type %T", key)
+	}
+
+	raw, err := asn1.Marshal(ki)
+	if err != nil {
+		return nil, fmt.Errorf("marshal PrivateKeyInfo: %v", err)
+	}
+	return raw, nil
+}
+
+func oidFromNamedCurve(key *ecdsa.PrivateKey) (asn1.ObjectIdentifier, error) {
+	switch key.Params().Name {
+	case "P-224":
+		return oidNamedCurveP224, nil
+	case "P-256":
+		return oidNamedCurveP256, nil
+	case "P-384":
+		return oidNamedCurveP384, nil
+	case "P-521":
+		return oidNamedCurveP521, nil
+	}
+	return nil, fmt.Errorf("unknown named curve %q", key.Params().Name)
 }
 
 // DecryptJavaKeyEncryption1 decrypts ciphertext encrypted with one of the Java
