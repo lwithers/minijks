@@ -11,12 +11,6 @@ import (
 	"time"
 )
 
-var (
-	// RFC 3279 § 2.3
-	oidPublicKeyRSA = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 1}
-	asn1NULL        = []byte{0x05, 0x00}
-)
-
 func (ks *Keystore) Pack(opts *Options) ([]byte, error) {
 	var buf bytes.Buffer
 	writeUint32(&buf, MagicNumber)

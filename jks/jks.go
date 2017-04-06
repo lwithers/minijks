@@ -24,45 +24,22 @@ const (
 	CertType = "X.509"
 )
 
-type Cert struct {
-	Alias     string
-	Timestamp time.Time
-	Raw       []byte
-
-	CertErr error
-	Cert    *x509.Certificate
-}
-
-type Keypair struct {
-	Alias     string
-	Timestamp time.Time
-
-	PrivKeyErr   error
-	EncryptedKey []byte
-
-	// RawKey is the raw marshalled private key, after it has been
-	// decrypted. It will not have been set if decryption failed.
-	RawKey []byte
-
-	// PrivateKey is the unmarshalled private key. It will not have been
-	// set if decryption failed or if unmarshalling failed.
-	PrivateKey interface{}
-
-	CertChain []*KeypairCert
-}
-
-type KeypairCert struct {
-	Raw []byte
-
-	Cert    *x509.Certificate
-	CertErr error
-}
-
+// Keystore represents a single JKS file. It holds a list of certificates and a
+// list of keypairs (private keys with associated certificate chains).
 type Keystore struct {
-	Certs    []*Cert
+	// Certs is a list of CA certificates to trust. It may contain either
+	// root or intermediate CA certificates. It should not contain end-user
+	// certificates.
+	Certs []*Cert
+
+	// Keypairs is a list of private keys. Each key may have a certificate
+	// chain associated with it.
 	Keypairs []*Keypair
 }
 
+// Options for manipulating a keystore. These allow the caller to specify the
+// password(s) used, or to skip the digest verification if the password is
+// unknown.
 type Options struct {
 	// Password is used as part of a SHA-1 digest over the .jks file.
 	Password string
@@ -77,6 +54,59 @@ type Options struct {
 	// value is the password. If there is no entry in the map for a given
 	// alias, then the top-level Password is inherited.
 	KeyPasswords map[string]string
+}
+
+// Cert holds a certificate to trust.
+type Cert struct {
+	Alias     string
+	Timestamp time.Time
+	Raw       []byte
+
+	CertErr error
+	Cert    *x509.Certificate
+}
+
+// Keypair holds a private key and an associated certificate chain.
+type Keypair struct {
+	// Alias is a name used to refer to this keypair.
+	Alias string
+
+	// Timestamp records when this record was created.
+	Timestamp time.Time
+
+	// PrivKeyErr is set if an error is encountered during decryption or
+	// unmarshalling of the decrypted key.
+	PrivKeyErr error
+
+	// EncryptedKey is the raw PKCS#8 marshalled EncryptedPrivateKeyInfo.
+	EncryptedKey []byte
+
+	// RawKey is the raw PKCS#8 marshalled PrivateKeyInfo, after it has
+	// been decrypted. It will not have been set if decryption failed.
+	RawKey []byte
+
+	// PrivateKey is the unmarshalled private key. It will not have been
+	// set if decryption failed or if unmarshalling failed.
+	PrivateKey interface{}
+
+	// CertChain is a chain of certificates associated with the private key.
+	// The first entry in the chain (index 0) should correspond to
+	// PrivateKey; there should then follow any intermediate CAs. In
+	// general the root CA should not be part of the chain.
+	CertChain []*KeypairCert
+}
+
+// KeypairCert is an entry in the certificate chain associated with a Keypair.
+type KeypairCert struct {
+	// Raw X.509 certificate data (in DER form).
+	Raw []byte
+
+	// Cert is the parsed X.509 certificate. It is nil if the certificate
+	// could not be parsed.
+	Cert *x509.Certificate
+
+	// CertErr records any error encountered while parsing a certificate.
+	CertErr error
 }
 
 var defaultOptions = Options{
