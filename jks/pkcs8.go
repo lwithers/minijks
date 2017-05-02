@@ -70,9 +70,9 @@ type PrivateKeyInfo struct {
 	PrivateKey []byte
 }
 
-// DecryptPKCS8 decrypts a PKCS#8 encoded object (presumably a private key). We
-// only know how to handle the two encryption algorithms that are used by the
-// Java keytool program.
+// DecryptPKCS8 decrypts a PKCS#8 EncryptedPrivateKeyInfo, presumably returning
+// a marshalled PrivateKeyInfo structure. It only knows how to handle the two
+// encryption algorithms that are used by the Java keytool program.
 func DecryptPKCS8(raw []byte, password string) ([]byte, error) {
 	// unmarshal the ASN.1 structure, ensure there's no trailing data
 	var keyInfo EncryptedPrivateKeyInfo
@@ -96,7 +96,7 @@ func DecryptPKCS8(raw []byte, password string) ([]byte, error) {
 			password)
 
 	case keyInfo.Algo.Algorithm.Equal(JavaKeyEncryptionOID2):
-		// TODO
+		// TODO: need to implement this
 		return nil, errors.New("not implemented yet")
 
 	default:
@@ -111,6 +111,8 @@ func MarshalPKCS8(key interface{}) ([]byte, error) {
 	var ki PrivateKeyInfo
 	switch key := key.(type) {
 	case *rsa.PrivateKey:
+		// we simply put the PKCS#1-encoded key into a wrapper that
+		// says it's an RSA key
 		ki.Algo = pkix.AlgorithmIdentifier{
 			Algorithm:  oidPublicKeyRSA,
 			Parameters: asn1NULL,
@@ -118,6 +120,9 @@ func MarshalPKCS8(key interface{}) ([]byte, error) {
 		ki.PrivateKey = x509.MarshalPKCS1PrivateKey(key)
 
 	case *ecdsa.PrivateKey:
+		// the PKCS#8 wrapper (PrivateKeyInfo) has algorithm set to
+		// identify the elliptic curve key, but needs a parameter to
+		// state the curve.
 		c, err := oidFromNamedCurve(key)
 		if err != nil {
 			return nil, err
@@ -149,6 +154,8 @@ func MarshalPKCS8(key interface{}) ([]byte, error) {
 	return raw, nil
 }
 
+// oidFromNamedCurve returns an OID which identifies the curve used in the
+// given key.
 func oidFromNamedCurve(key *ecdsa.PrivateKey) (asn1.ObjectIdentifier, error) {
 	switch key.Params().Name {
 	case "P-224":
@@ -172,13 +179,6 @@ func oidFromNamedCurve(key *ecdsa.PrivateKey) (asn1.ObjectIdentifier, error) {
 //  https://github.com/lwithers/go-crypto-examples
 func DecryptJavaKeyEncryption1(ciphertext []byte, password string,
 ) ([]byte, error) {
-	// encode the password in UCS-2
-	var passwd []byte
-	for _, r := range password {
-		passwd = append(passwd, byte(r>>8))
-		passwd = append(passwd, byte(r))
-	}
-
 	// split the blob into salt:ciphertext:digest
 	if len(ciphertext) <= 40 {
 		return nil, errors.New("not enough data for encryption type 1")
@@ -187,14 +187,11 @@ func DecryptJavaKeyEncryption1(ciphertext []byte, password string,
 	digest := ciphertext[len(ciphertext)-20:]
 	ciphertext = ciphertext[20 : len(ciphertext)-20]
 
-	// basically, we use a SHA-1 hash over (passwd+lastHash) to produce
-	// a stream of bytes we then XOR with the "ciphertext". For the first
-	// block we use ‘salt’ in place of ‘last_hash’.
-	xorStream := xorStreamForJavaKeyEncryption1(len(ciphertext),
-		passwd, salt)
-
 	// XOR the SHA-1-derived bytestream with the "ciphertext" to recover
 	// the plaintext
+	passwd := PasswordUTF16(password)
+	xorStream := xorStreamForJavaKeyEncryption1(len(ciphertext),
+		passwd, salt)
 	plaintext := make([]byte, len(ciphertext))
 	for i := range ciphertext {
 		plaintext[i] = ciphertext[i] ^ xorStream[i]
@@ -222,27 +219,17 @@ func DecryptJavaKeyEncryption1(ciphertext []byte, password string,
 //  https://github.com/lwithers/go-crypto-examples
 func EncryptJavaKeyEncryption1(plaintext []byte, password string,
 ) ([]byte, error) {
-	// encode the password in UCS-2
-	var passwd []byte
-	for _, r := range password {
-		passwd = append(passwd, byte(r>>8))
-		passwd = append(passwd, byte(r))
-	}
-
 	// generate a salt
 	var salt [20]byte
 	if _, err := rand.Read(salt[:]); err != nil {
 		return nil, err
 	}
 
-	// basically, we use a SHA-1 hash over (passwd+lastHash) to produce
-	// a stream of bytes we then XOR with the "ciphertext". For the first
-	// block we use ‘salt’ in place of ‘last_hash’.
-	xorStream := xorStreamForJavaKeyEncryption1(len(plaintext),
-		passwd, salt[:])
-
 	// XOR the SHA-1-derived bytestream with the plaintext to derive the
 	// "ciphertext"
+	passwd := PasswordUTF16(password)
+	xorStream := xorStreamForJavaKeyEncryption1(len(plaintext),
+		passwd, salt[:])
 	ciphertext := make([]byte, len(plaintext))
 	for i := range ciphertext {
 		ciphertext[i] = plaintext[i] ^ xorStream[i]

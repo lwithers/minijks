@@ -7,6 +7,7 @@ import (
 	"crypto/sha1"
 	"crypto/x509"
 	"time"
+	"unicode/utf16"
 )
 
 const (
@@ -14,7 +15,7 @@ const (
 	MagicNumber = 0xFEEDFEED
 
 	// DigestSeparator is used to build the file's verification digest. The
-	// digest is over the keystore password encoded as UCS-2, then this
+	// digest is over the keystore password encoded as UTF-16, then this
 	// string (yes, really — check the OpenJDK source) encoded as UTF-8, and
 	// then the actual file data.
 	DigestSeparator = "Mighty Aphrodite"
@@ -52,18 +53,28 @@ type Options struct {
 	// KeyPasswords are used to generate the "encryption" keys for stored
 	// private keys. The map's key is the alias of the private key, and the
 	// value is the password. If there is no entry in the map for a given
-	// alias, then the top-level Password is inherited.
+	// alias, then the top-level Password is inherited. Empty strings are
+	// interpreted as an empty password, so use delete() if you truly want
+	// to delete values.
 	KeyPasswords map[string]string
 }
 
 // Cert holds a certificate to trust.
 type Cert struct {
-	Alias     string
-	Timestamp time.Time
-	Raw       []byte
+	// Alias is a name used to refer to this certificate.
+	Alias string
 
+	// Timestamp records when this record was created.
+	Timestamp time.Time
+
+	// Raw is the raw X.509 certificate marshalled in DER form.
+	Raw []byte
+
+	// CertErr is set if there is an error parsing the certificate.
 	CertErr error
-	Cert    *x509.Certificate
+
+	// Cert is the parsed X.509 certificate.
+	Cert *x509.Certificate
 }
 
 // Keypair holds a private key and an associated certificate chain.
@@ -119,17 +130,31 @@ var defaultOptions = Options{
 // https://github.com/lwithers/go-crypto-examples instead. Note this construct
 // is vulnerable to a length extension attack, which is actually exploitable if
 // the JKS reader code does not properly check the "number of entries" value.
-func ComputeDigest(raw []byte, password string) []byte {
+func ComputeDigest(raw []byte, passwd string) []byte {
+	// compute SHA-1 digest over the construct:
+	//  UTF-16(password) + UTF-8(DigestSeparator) + raw
 	md := sha1.New()
-	var ucs2 [2]byte
-	for _, r := range password {
-		ucs2[0] = byte((r >> 8) & 0xFF)
-		ucs2[1] = byte(r & 0xFF)
-
-		md.Write(ucs2[:])
-	}
-
+	p := PasswordUTF16(passwd)
+	md.Write(p)
 	md.Write([]byte(DigestSeparator))
 	md.Write(raw)
 	return md.Sum(nil)
+}
+
+// PasswordUTF16 returns a password encoded in UTF-16, big-endian byte order.
+func PasswordUTF16(passwd string) []byte {
+	var u []byte
+	for _, r := range passwd {
+		if r < 0x10000 {
+			u = append(u, byte((r>>8)&0xFF))
+			u = append(u, byte(r&0xFF))
+		} else {
+			r1, r2 := utf16.EncodeRune(r)
+			u = append(u, byte((r1>>8)&0xFF))
+			u = append(u, byte(r1&0xFF))
+			u = append(u, byte((r2>>8)&0xFF))
+			u = append(u, byte(r2&0xFF))
+		}
+	}
+	return u
 }

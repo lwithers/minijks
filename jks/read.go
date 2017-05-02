@@ -14,6 +14,17 @@ import (
 	"time"
 )
 
+// Parse a JKS file. If desired, opts may be specified to provide more control
+// over the parsing. If nil, then we will use an empty password when attempting
+// to decrypt keys and will not attempt to verify the digest stored in the file.
+//
+// Errors encountered when parsing a certificate, or decrypting or parsing a
+// private key, are stored within the returned Keystore structure. These do not
+// lead to the parse failing and will not be returned as an error by the top
+// level function. Unrecoverable errors (i.e. malformed file) will result in the
+// Parse function returning an error. If digest verification is requested and
+// the password or the digest is incorrect, an error will also be returned. If
+// any useful data has been extracted it will be returned as a partial Keystore.
 func Parse(raw []byte, opts *Options) (*Keystore, error) {
 	if opts == nil {
 		opts = &defaultOptions
