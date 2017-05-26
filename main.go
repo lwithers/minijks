@@ -10,7 +10,7 @@ import (
 func main() {
 	app := &cli.App{
 		Name:    "minijks",
-		Version: "0.0.0",
+		Version: "0.5.0",
 		Usage:   "inspect, unpack and pack Java keystore files",
 		Commands: []*cli.Command{
 			InspectCommand,
