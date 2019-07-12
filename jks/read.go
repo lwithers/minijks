@@ -40,7 +40,7 @@ func Parse(raw []byte, opts *Options) (*Keystore, error) {
 	}
 	if magic != MagicNumber {
 		return nil, fmt.Errorf("invalid magic; expected 0x%08X "+
-			"but got 0x%08X", MagicNumber, magic)
+			"but got 0x%08X", uint32(MagicNumber), magic)
 	}
 
 	version, _, err := readUint32(buf, "file version")
