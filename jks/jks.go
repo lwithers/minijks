@@ -12,7 +12,7 @@ import (
 
 const (
 	// MagicNumber is written at the start of each .jks file.
-	MagicNumber = 0xFEEDFEED
+	MagicNumber uint32 = 0xFEEDFEED
 
 	// DigestSeparator is used to build the file's verification digest. The
 	// digest is over the keystore password encoded as UTF-16, then this
