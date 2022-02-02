@@ -10,8 +10,7 @@ import (
 	"time"
 
 	"github.com/lwithers/minijks/jks"
-
-	cli "gopkg.in/urfave/cli.v2"
+	"github.com/urfave/cli/v2"
 )
 
 func addJksOptsFlags(in []cli.Flag) []cli.Flag {
