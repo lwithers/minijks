@@ -192,6 +192,9 @@ func packKeypair(opts *jks.Options, dir string) (*jks.Keypair, error) {
 
 	block, err := packLoadPem(fname)
 	switch block.Type {
+	case "PRIVATE KEY":
+		kp.PrivateKey, err = x509.ParsePKCS8PrivateKey(block.Bytes)
+
 	case "RSA PRIVATE KEY":
 		kp.PrivateKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
 
