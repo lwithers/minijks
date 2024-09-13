@@ -78,6 +78,18 @@ could be considered similar to a `tar c` operation.
 
 TODO: explain directory format.
 
+### Pack key file
+
+The `keyfile` command will pack a single private key and associated certificate
+chain into a `.jks` file. It takes two or more arguments: the name of the
+output file, and then one or more `.pem` input files. The certificates are
+packed in the order they are named on the command line, and then the order
+they appear in the input file(s). The first certificate (leaf certificate)
+is expected to match the private key.
+
+This command is a shortcut to packing a `.jks` file containing a single client
+or server keypair.
+
 ## TODO list
 
 Pull requests accepted!

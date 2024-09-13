@@ -16,6 +16,7 @@ func main() {
 			InspectCommand,
 			UnpackCommand,
 			PackCommand,
+			KeyfileCommand,
 		},
 	}
 	if err := app.Run(os.Args); err != nil {
