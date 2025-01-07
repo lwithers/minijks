@@ -1,0 +1,8 @@
+version: 2
+updates:
+  # Enable version updates for go.mod
+  - package-ecosystem: "gomod"
+    # Look for `go.mod` in the `root` directory
+    directory: "/"
+    schedule:
+      interval: "weekly"
